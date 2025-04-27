@@ -7,9 +7,7 @@ import creds
 AIRTABLE_API_URL = 'https://api.airtable.com/v0/app69VOY1oNDOWhHl/tblclQ6dJrZD55ORz'
 AIRTABLE_PAT = creds.AIRTABLE_PAT
 
-LAT = "39.77"
-LON = "-75.58"
-WEATHER_API_URL = f'https://api.openweathermap.org/data/2.5/weather?lat={LAT}&lon={LON}&units=imperial&appid={creds.WEATHER_API}'
+WEATHER_API_URL = f'https://api.openweathermap.org/data/2.5/weather?lat={creds.LAT}&lon={creds.LON}&units=imperial&appid={creds.WEATHER_API}'
 
 headers = {
     'Authorization': f'Bearer {AIRTABLE_PAT}',
