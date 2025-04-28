@@ -59,23 +59,27 @@ def main():
             results = model.track(frame, conf=MIN_CONF, imgsz=320, verbose=False)[0] #uses boT SORT tracking algorithm, its able to maintain the ID's of the objects using motion features
             fps = 1 / (time.time() - start_time)
             
-            if results.boxes is not None:
+            if results.boxes is not None and results.boxes.id is not None:
                 boxes = results.boxes.xyxy.cpu().numpy()
-                if len(boxes) > 0:
-                    x1, _, x2, _ = map(int, max(boxes, key=lambda b: (b[2]-b[0])*(b[3]-b[1])))
-                    current_x = (x1 + x2) // 2 # calculates the horizontal center of the bounding box, only uses the x-axis for directional tracking
-                    
-                    if last_position is not None:
-                        if last_position < BX1 and current_x >= BX1:
-                            pass  # Object entering left buffer, ignore for now
-                        elif last_position > BX2 and current_x <= BX2:
-                            pass  # Object entering right buffer, ignore
-                        if last_position < CX1 and current_x >= CX1:
+                ids = results.boxes.id.cpu().numpy()
+                
+                for box, track_id in zip(boxes, ids):
+                    x1, _, x2, _ = map(int, box)
+                    current_x = (x1 + x2) // 2
+
+                    if track_id in last_positions:
+                        last_x = last_positions[track_id]
+                        if last_x < BX1 and current_x >= BX1:
+                            pass
+                        elif last_x > BX2 and current_x <= BX2:
+                            pass
+                        if last_x < CX1 and current_x >= CX1:
                             counts['in'] += 1
-                        elif last_position > CX2 and current_x <= CX2:
+                        elif last_x > CX2 and current_x <= CX2:
                             counts['out'] += 1
-                    
-                    last_position = current_x
+
+                    last_positions[track_id] = current_x
+
             
             # Single-line logging
             time_left = max(0, UPDATE_INTERVAL - (time.time() - last_update))
