@@ -41,7 +41,7 @@ def main():
     model = YOLO('yolov5nu.pt') # this is a lighter version of yolov5 which helps the pi run smoother.
     counts = {'in': 0, 'out': 0}
     last_update = time.time()
-    last_position = None
+    last_positions = {}
 
     try:
         print("Starting counter [IN:0 OUT:0] - Next update in 20:00")
@@ -88,7 +88,7 @@ def main():
                 f"Temp:{get_cpu_temp():.1f}C "
                 f"IN:{counts['in']} "
                 f"OUT:{counts['out']} "
-                f"Pos:{last_position or '-'} "
+                f"Pos:{last_positions or '-'} "
                 f"Next:{timedelta(seconds=int(time_left))}",
                 end="", flush=True
             )
