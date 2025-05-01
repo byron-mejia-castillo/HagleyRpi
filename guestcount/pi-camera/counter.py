@@ -8,12 +8,12 @@ from picamera2 import Picamera2
 from airtable import send_to_airtable
 
 # Config
-CX1, CX2 = 220, 280 #the are the boundary lines to detect people entering and exiting
-BX1, BX2 = 190,290 # these are buffer zones
-MIN_CONF = 0.3 # pi must have above 50% confidence to count an object as a person
-FRAME_SIZE = (640, 480) # using this resolution to balance performance and detection accuracy
-UPDATE_INTERVAL = 1200  # 20 minutes, 1200 seconds
-EST = timezone('US/Eastern') # from pytz
+CX1, CX2 = 220, 280  # Center lines for counting
+BX1, BX2 = 190, 290  # Buffer zones to avoid bounce noise
+MIN_CONF = 0.25       # Increased confidence threshold to filter out false positives
+FRAME_SIZE = (640, 480)
+UPDATE_INTERVAL = 1200  # 20 minutes
+EST = timezone('US/Eastern')
 
 def get_cpu_temp():
     try:
@@ -22,82 +22,78 @@ def get_cpu_temp():
         return 0.0
 
 def should_run():
-    """Check if current time is between 10 AM and 5 PM EST."""
     now = datetime.now(EST)
-    return 10 <= now.hour < 17  # Simplified check
+    return 10 <= now.hour < 22
 
 def main():
-    # Initial operating hours check
     if not should_run():
         print("Outside operating hours (10 AM - 5 PM EST). Exiting cleanly.")
         sys.exit(0)
 
-    # Initialize hardware
+    # Initialize camera
     picam2 = Picamera2()
     config = picam2.create_video_configuration(main={"size": FRAME_SIZE, "format": "RGB888"})
     picam2.configure(config)
     picam2.start()
-    
-    model = YOLO('yolov5nu.pt') # this is a lighter version of yolov5 which helps the pi run smoother.
+
+    model = YOLO('yolov8n.pt')
     counts = {'in': 0, 'out': 0}
     last_update = time.time()
-    last_position = None
+    last_positions = {}
 
     try:
         print("Starting counter [IN:0 OUT:0] - Next update in 20:00")
         while True:
-            # Continuous operating hours check
             if not should_run():
                 print("\nOperating hours ended (5 PM EST). Shutting down.")
                 if counts['in'] > 0 or counts['out'] > 0:
                     send_to_airtable(counts['in'], counts['out'])
-                sys.exit(0)  # Clean exit
+                sys.exit(0)
+
             start_time = time.time()
             frame = picam2.capture_array()[:, :, :3]
-            
-            # Detection
-            results = model.track(frame, conf=MIN_CONF, imgsz=320, verbose=False)[0] #uses boT SORT tracking algorithm, its able to maintain the ID's of the objects using motion features
+
+            results = model.track(frame, conf=MIN_CONF, imgsz=320, verbose=False)[0]
             fps = 1 / (time.time() - start_time)
-            
-            if results.boxes is not None:
+
+            if results.boxes is not None and results.boxes.id is not None:
                 boxes = results.boxes.xyxy.cpu().numpy()
-                if len(boxes) > 0:
-                    x1, _, x2, _ = map(int, max(boxes, key=lambda b: (b[2]-b[0])*(b[3]-b[1])))
-                    current_x = (x1 + x2) // 2 # calculates the horizontal center of the bounding box, only uses the x-axis for directional tracking
-                    
-                    if last_position is not None:
-                        if last_position < BX1 and current_x >= BX1:
-                            pass  # Object entering left buffer, ignore for now
-                        elif last_position > BX2 and current_x <= BX2:
-                            pass  # Object entering right buffer, ignore
-                        if last_position < CX1 and current_x >= CX1:
+                ids = results.boxes.id.cpu().numpy()
+
+                for box, track_id in zip(boxes, ids):
+                    x1, _, x2, _ = map(int, box)
+                    current_x = (x1 + x2) // 2
+
+                    last_x = last_positions.get(track_id)
+                    if last_x is not None:
+                        # Apply buffer zones around center lines
+                        if last_x < CX1 and current_x >= CX1:
                             counts['in'] += 1
-                        elif last_position > CX2 and current_x <= CX2:
+                        elif last_x > CX2 and current_x <= CX2:
                             counts['out'] += 1
-                    
-                    last_position = current_x
-            
-            # Single-line logging
+
+                    last_positions[track_id] = current_x
+
+            # Display stats
             time_left = max(0, UPDATE_INTERVAL - (time.time() - last_update))
             print(
                 f"\rFPS:{fps:.1f} "
                 f"Temp:{get_cpu_temp():.1f}C "
                 f"IN:{counts['in']} "
                 f"OUT:{counts['out']} "
-                f"Pos:{last_position or '-'} "
+                f"IDs:{len(last_positions)} "
                 f"Next:{timedelta(seconds=int(time_left))}",
                 end="", flush=True
             )
-            
-            # 20-minute Airtable update
+
             if time.time() - last_update >= UPDATE_INTERVAL:
                 send_to_airtable(counts['in'], counts['out'])
                 counts = {'in': 0, 'out': 0}
                 last_update = time.time()
                 print(f"\rAirtable updated - Next in 20:00", end="")
-            
+
             time.sleep(max(0, 0.1 - (time.time() - start_time)))
-            
+
     except KeyboardInterrupt:
         if counts['in'] > 0 or counts['out'] > 0:
             send_to_airtable(counts['in'], counts['out'])
@@ -107,3 +103,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
