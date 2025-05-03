@@ -6,7 +6,6 @@ import pytz  # For timezone-aware timestamps
 from pyairtable import Api  # Airtable Python wrapper for API interaction
 
 # Airtable access credentials (PAT should be stored securely in production)
-PAT = "patIkW82vVILSlEHW.188b0893d8b7845f5c19190194a221091a3afcc330d36fc29fa7b1670214d3dd"
 BASE_ID = "app69VOY1oNDOWhHl"  # ID of the Airtable base
 TABLE_NAME = "Guest Tracking"  # Name of the table where guest data will be stored
 
